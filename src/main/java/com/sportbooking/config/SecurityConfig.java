@@ -27,6 +27,10 @@ public class SecurityConfig {
             "/api/v1/auth/register",
             "/api/v1/auth/login",
             "/api/v1/auth/refresh",
+            // VNPay gọi IPN từ server của họ, trình duyệt quay về return URL: không có JWT.
+            // Bảo vệ bằng chữ ký HMAC thay vì đăng nhập.
+            "/api/v1/payments/vnpay/ipn",
+            "/api/v1/payments/vnpay/return",
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs/**",

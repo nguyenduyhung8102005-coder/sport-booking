@@ -50,7 +50,11 @@ public enum ErrorCode {
 
     // ===== Vòng đời lượt đặt (GĐ 5) =====
     INVALID_BOOKING_STATE(HttpStatus.CONFLICT, "Trạng thái lượt đặt không cho phép thao tác này"),
-    CANCELLATION_NOT_ALLOWED(HttpStatus.CONFLICT, "Không thể hủy lượt đặt này");
+    CANCELLATION_NOT_ALLOWED(HttpStatus.CONFLICT, "Không thể hủy lượt đặt này"),
+
+    // ===== Thanh toán (GĐ 6) =====
+    PAYMENT_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "Cổng thanh toán VNPay chưa được cấu hình"),
+    INVALID_PAYMENT_SIGNATURE(HttpStatus.BAD_REQUEST, "Chữ ký dữ liệu thanh toán không hợp lệ");
 
     private final HttpStatus status;
     private final String defaultMessage;

@@ -16,8 +16,8 @@ Spring Security + JWT (jjwt) · Swagger/OpenAPI · Docker Compose · JUnit 5 · 
 | 2 | Đăng ký / đăng nhập, JWT access + refresh token, phân quyền, duyệt chủ sân | ✅ Hoàn thành |
 | 3 | Quản lý cụm sân, sân con, bảng giá; tìm kiếm có phân trang và lọc | ✅ Hoàn thành |
 | 4 | Xem slot trống, đặt sân chống double booking, test đồng thời | ✅ Hoàn thành |
-| 5 | Giữ chỗ 10 phút, `@Scheduled` tự hủy booking quá hạn, hủy theo chính sách, lịch chủ sân | 🟡 Xong phần code |
-| 6 | Thanh toán VNPay sandbox, IPN idempotent | ⏳ |
+| 5 | Giữ chỗ 10 phút, `@Scheduled` tự hủy booking quá hạn, hủy theo chính sách, lịch chủ sân | ✅ Hoàn thành |
+| 6 | Thanh toán VNPay sandbox, IPN idempotent | 🟡 Xong phần code |
 | 7 | Email `@Async`, đánh giá, thống kê doanh thu | ⏳ |
 | 8 | Hoàn thiện test, Dockerfile, tài liệu | ⏳ |
 
@@ -48,6 +48,8 @@ mvn test
 | `JWT_SECRET` | khóa dev trong `application.yml` | Base64 của khóa ≥ 256 bit. Tạo: `openssl rand -base64 32` |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | `admin@sportbooking.vn` / `Admin@123456` | Tài khoản ADMIN tạo tự động khi khởi động lần đầu |
 | `SPRING_PROFILES_ACTIVE` | `dev` | `dev` tự tạo dữ liệu mẫu; đặt `prod` khi deploy |
+| `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` | (trống) | Thông tin sandbox VNPay. Đặt trong file `.env` (xem `.env.example`, không commit) |
+| `VNPAY_RETURN_URL` | `http://localhost:8080/api/v1/payments/vnpay/return` | Nơi VNPay chuyển trình duyệt về |
 
 ### Dữ liệu mẫu (profile `dev`)
 
@@ -202,6 +204,38 @@ curl -X POST http://localhost:8080/api/v1/owner/bookings/5/cancel -H "Authorizat
   -H "Content-Type: application/json" -d '{"reason":"Sân bảo trì"}'
 ```
 
+## ⭐ Thanh toán VNPay (Giai đoạn 6)
+
+```
+Khách ──POST /bookings/{id}/payments──> Server: lưu Payment PENDING, trả paymentUrl đã ký
+Khách ──mở paymentUrl──> trang VNPay ──thanh toán──┬──> IPN (server VNPay gọi server mình)   ← GHI NHẬN TIỀN
+                                                    └──> Return URL (trình duyệt quay về)    ← CHỈ HIỂN THỊ
+```
+
+| Nguyên tắc | Cách làm |
+|---|---|
+| Không tin dữ liệu chưa ký | Mọi tham số từ VNPay được kiểm tra chữ ký HMAC-SHA512 trước khi đọc DB; so sánh chữ ký bằng `MessageDigest.isEqual` |
+| IPN là nguồn sự thật duy nhất | Return URL đi qua trình duyệt, khách có thể đóng tab: chỉ hiển thị, không đổi trạng thái |
+| Idempotent | IPN gửi lại (kể cả đồng thời) chỉ xử lý 1 lần: khóa dòng payment `FOR UPDATE`, đã xử lý thì trả `02` |
+| Đối chiếu số tiền | `vnp_Amount / 100` phải bằng số tiền đã lưu, lệch thì trả `04` |
+| Hạn thanh toán = hạn giữ chỗ | `vnp_ExpireDate` = `expires_at` của lượt đặt |
+| Tiền về khi lượt đặt đã hết hạn | Không "hồi sinh" lượt đặt (slot có thể đã thuộc người khác): payment `REFUND_REQUIRED` |
+| Tranh chấp với job hết hạn | `@Version` trên booking; IPN thua trả `99` → VNPay tự gửi lại → lần sau xử lý theo trạng thái mới |
+
+Mã trả về cho VNPay: `00` xử lý xong · `01` không thấy giao dịch · `02` đã xử lý · `04` sai số tiền · `97` sai chữ ký · `99` lỗi khác.
+
+### Chạy thử với sandbox
+
+1. Đăng ký tại https://sandbox.vnpayment.vn/devreg/ để nhận `vnp_TmnCode` và `vnp_HashSecret` qua email.
+2. `cp .env.example .env`, điền 2 giá trị trên, khởi động lại app.
+3. Đăng nhập customer, đặt sân, gọi `POST /api/v1/bookings/{id}/payments`, mở `paymentUrl` trên trình duyệt,
+   thanh toán bằng thẻ test của sandbox (ngân hàng NCB, thông tin thẻ có trong tài liệu / email sandbox).
+4. **IPN khi chạy trên máy cá nhân:** VNPay không gọi được `localhost`. Hai cách:
+   - Mở tunnel HTTPS (`ngrok http 8080` hoặc `cloudflared tunnel --url http://localhost:8080`) và cấu hình IPN URL
+     `https://<tunnel>/api/v1/payments/vnpay/ipn` trong trang quản trị merchant sandbox.
+   - Cách nhanh khi học: sau khi thanh toán, trình duyệt quay về return URL kèm đầy đủ tham số `vnp_*` đã được VNPay ký,
+     đúng bộ tham số của IPN. Sao chép phần query đó và gọi `GET /api/v1/payments/vnpay/ipn?<query>` để mô phỏng IPN.
+
 ## Quyết định thiết kế chính
 
 - **Slot cố định 30 phút.** Mỗi lượt đặt được tách thành các slot trong bảng `booking_slots`.
@@ -230,6 +264,7 @@ curl -X POST http://localhost:8080/api/v1/owner/bookings/5/cancel -H "Authorizat
 - Giới hạn 3 lượt chưa thanh toán là giới hạn "mềm": nhiều request song song của cùng 1 khách có thể vượt nhẹ.
 - Lượt PENDING quá hạn vẫn chiếm slot thêm tối đa ~30 giây cho tới lần chạy kế tiếp của job.
 - Chạy nhiều instance: job vẫn đúng nhờ `@Version` nhưng các instance có thể làm trùng việc; cải tiến bằng ShedLock / khóa Redis.
-- Lượt đã thanh toán bị hủy: hoàn tiền xử lý thủ công (tự động qua VNPay refund API là phần mở rộng).
+- Lượt đã thanh toán bị hủy, hoặc payment `REFUND_REQUIRED`: hoàn tiền xử lý thủ công (tự động qua VNPay refund API là phần mở rộng).
+- Chưa có job đối soát chủ động (gọi API querydr của VNPay) cho giao dịch PENDING lâu không nhận được IPN.
 - Đăng xuất chỉ thu hồi refresh token; access token vẫn dùng được tới khi hết hạn (tối đa 15 phút).
   Chặn ngay cần blacklist (dự kiến dùng Redis sau MVP).

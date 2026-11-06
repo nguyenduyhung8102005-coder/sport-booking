@@ -1,6 +1,9 @@
 spring:
   application:
     name: sport-booking
+  config:
+    # Đọc thêm biến từ file .env ở thư mục chạy app nếu có (chứa secret VNPay, không commit lên Git)
+    import: optional:file:.env[.properties]
   profiles:
     # Không chỉ định profile -> dùng "dev" (bật DevDataSeeder). Khi deploy: SPRING_PROFILES_ACTIVE=prod
     default: dev
@@ -64,6 +67,13 @@ app:
   scheduling:
     # Bật/tắt các job @Scheduled (test tắt đi và gọi job trực tiếp để kết quả xác định)
     enabled: true
+  vnpay:
+    # Bỏ trống thì app vẫn chạy, chỉ API tạo thanh toán báo "chưa cấu hình"
+    tmn-code: ${VNPAY_TMN_CODE:}
+    hash-secret: ${VNPAY_HASH_SECRET:}
+    pay-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+    return-url: ${VNPAY_RETURN_URL:http://localhost:8080/api/v1/payments/vnpay/return}
+    version: 2.1.0
 
 springdoc:
   swagger-ui:

@@ -19,10 +19,15 @@ public final class BookingCodeGenerator {
     }
 
     public static String generate(LocalDate today) {
-        StringBuilder code = new StringBuilder("BK").append(DATE_PART.format(today));
-        for (int i = 0; i < 6; i++) {
-            code.append(ALPHABET[RANDOM.nextInt(ALPHABET.length)]);
+        return "BK" + DATE_PART.format(today) + randomChars(6);
+    }
+
+    /** Chuỗi ngẫu nhiên chỉ gồm chữ in hoa và số (VNPay yêu cầu vnp_TxnRef chỉ có chữ và số). */
+    public static String randomChars(int length) {
+        StringBuilder value = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            value.append(ALPHABET[RANDOM.nextInt(ALPHABET.length)]);
         }
-        return code.toString();
+        return value.toString();
     }
 }

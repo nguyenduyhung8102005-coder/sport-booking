@@ -122,6 +122,15 @@ public class Booking extends AuditableEntity {
         return LocalDateTime.of(bookingDate, startTime);
     }
 
+    /** Thanh toán thành công (GĐ 6). Slot vẫn giữ nguyên, chỉ đổi trạng thái. */
+    public void confirm() {
+        if (status != BookingStatus.PENDING) {
+            throw new AppException(ErrorCode.INVALID_BOOKING_STATE,
+                    "Chỉ lượt đặt đang chờ thanh toán mới có thể xác nhận (hiện tại: " + status + ")");
+        }
+        status = BookingStatus.CONFIRMED;
+    }
+
     public void expire() {
         if (status != BookingStatus.PENDING) {
             throw new AppException(ErrorCode.INVALID_BOOKING_STATE,

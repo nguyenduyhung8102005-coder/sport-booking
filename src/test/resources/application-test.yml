@@ -3,6 +3,10 @@ app:
   scheduling:
     # Không để job chạy ngầm theo lịch trong lúc test: test tự gọi job khi cần -> kết quả luôn xác định
     enabled: false
+  vnpay:
+    # Thông tin giả cho test: test tự ký IPN bằng đúng secret này
+    tmn-code: TESTTMN1
+    hash-secret: TEST_SECRET_FOR_INTEGRATION_TESTS_ONLY
 
 logging:
   level:
