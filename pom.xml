@@ -68,6 +68,12 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- Actuator: endpoint /actuator/health cho Docker healthcheck / load balancer -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- Bean Validation (@NotBlank, @Email, ...) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

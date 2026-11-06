@@ -1,3 +1,5 @@
+# Chế độ dev (mặc định):          docker compose up -d                       -> chỉ PostgreSQL + Mailpit, app chạy từ IntelliJ
+# Chạy cả hệ thống bằng Docker:    docker compose --profile app up -d --build  -> thêm container app (build từ Dockerfile)
 services:
   postgres:
     image: postgres:17-alpine
@@ -23,6 +25,32 @@ services:
     ports:
       - "1025:1025"   # SMTP: app gửi mail vào đây
       - "8025:8025"   # Giao diện web để đọc mail
+
+  app:
+    # "profiles": service này chỉ chạy khi gọi với --profile app, để không tranh cổng 8080 với app chạy từ IntelliJ
+    profiles: ["app"]
+    build: .
+    container_name: sportbooking-app
+    depends_on:
+      postgres:
+        condition: service_healthy   # chờ PostgreSQL sẵn sàng thật sự (healthcheck), không chỉ "đã khởi động"
+      mailpit:
+        condition: service_started
+    # Đọc secret (VNPAY_*, JWT_SECRET...) từ .env nếu có. File .env không bị copy vào image (.dockerignore).
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Trong mạng của Compose, các container gọi nhau bằng TÊN SERVICE ("postgres"), không phải localhost:
+      # localhost bên trong container app là chính container app.
+      DB_URL: jdbc:postgresql://postgres:5432/sport_booking
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
 
 volumes:
   pgdata:

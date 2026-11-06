@@ -1,0 +1,10 @@
+# Không gửi những thứ này vào Docker build: build nhanh hơn và KHÔNG đưa secret (.env) vào image
+target/
+.git/
+.github/
+.idea/
+.vscode/
+*.iml
+.env
+*.log
+README.md

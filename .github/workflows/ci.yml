@@ -1,0 +1,32 @@
+# CI: mỗi lần push / mở pull request, GitHub tự build và chạy TOÀN BỘ test (kể cả Testcontainers,
+# vì máy ảo ubuntu của GitHub có sẵn Docker). Badge trạng thái hiển thị ở đầu README.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven            # cache ~/.m2 giữa các lần chạy
+
+      - name: Build và chạy test
+        run: mvn -B verify
+
+      - name: Lưu báo cáo test khi thất bại
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+
+      - name: Kiểm tra Dockerfile build được
+        run: docker build -t sport-booking:ci .

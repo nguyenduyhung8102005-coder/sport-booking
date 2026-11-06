@@ -1,0 +1,21 @@
+# Profile "prod": bật bằng SPRING_PROFILES_ACTIVE=prod. Ghi đè application.yml.
+#
+# FAIL FAST: các secret dưới đây KHÔNG có giá trị mặc định. Thiếu biến môi trường -> app dừng ngay lúc khởi động
+# với lỗi "Could not resolve placeholder", thay vì âm thầm chạy bằng khóa dev mà ai cũng thấy trên GitHub.
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: false
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+  admin:
+    email: ${ADMIN_EMAIL}
+    password: ${ADMIN_PASSWORD}
+
+logging:
+  level:
+    # Không in câu SQL: chậm và có thể lộ dữ liệu khách hàng trong log
+    org.hibernate.SQL: warn

@@ -34,10 +34,13 @@ public class SecurityConfig {
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs/**",
+            // Docker healthcheck / load balancer gọi định kỳ, không có token. Chỉ trả {"status":"UP"}.
+            "/actuator/health",
+            "/actuator/health/**",
             "/error"
     };
 
-    /** Xem thông tin sân không cần đăng nhập (endpoint sẽ có ở GĐ 3). */
+    /** Xem thông tin sân, lịch trống, đánh giá: không cần đăng nhập. */
     private static final String[] PUBLIC_GET_ENDPOINTS = {
             "/api/v1/venues/**",
             "/api/v1/courts/**"

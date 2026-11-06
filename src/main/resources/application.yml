@@ -8,7 +8,8 @@ spring:
     # Không chỉ định profile -> dùng "dev" (bật DevDataSeeder). Khi deploy: SPRING_PROFILES_ACTIVE=prod
     default: dev
   datasource:
-    url: jdbc:postgresql://localhost:5432/sport_booking
+    # Chạy trong Docker Compose: DB_URL=jdbc:postgresql://postgres:5432/sport_booking (tên service, không phải localhost)
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/sport_booking}
     username: ${DB_USERNAME:sport}
     password: ${DB_PASSWORD:sport123}
   jpa:
@@ -86,6 +87,23 @@ app:
     pay-url: https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
     return-url: ${VNPAY_RETURN_URL:http://localhost:8080/api/v1/payments/vnpay/return}
     version: 2.1.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Chỉ mở /actuator/health. Các endpoint khác (env, beans, heapdump...) lộ cấu hình và secret.
+        include: health
+  endpoint:
+    health:
+      # Bật /actuator/health/liveness và /readiness (chuẩn của Kubernetes)
+      probes:
+        enabled: true
+  health:
+    mail:
+      # Mặc định Actuator coi app "DOWN" nếu không kết nối được SMTP. Email không phải chức năng sống còn
+      # (đặt sân vẫn chạy khi mất mail) -> không để nó làm app bị đánh dấu hỏng và bị khởi động lại.
+      enabled: false
 
 springdoc:
   swagger-ui:
