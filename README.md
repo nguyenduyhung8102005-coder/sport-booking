@@ -14,8 +14,8 @@ Spring Security + JWT (jjwt) · Swagger/OpenAPI · Docker Compose · JUnit 5 · 
 |---|---|---|
 | 1 | Khởi tạo project, schema Flyway, Swagger, response format, exception handler | ✅ Hoàn thành |
 | 2 | Đăng ký / đăng nhập, JWT access + refresh token, phân quyền, duyệt chủ sân | ✅ Hoàn thành |
-| 3 | Quản lý cụm sân, sân con, bảng giá; tìm kiếm có phân trang và lọc | 🟡 Xong phần code |
-| 4 | Xem slot trống, đặt sân chống double booking, test đồng thời | ⏳ |
+| 3 | Quản lý cụm sân, sân con, bảng giá; tìm kiếm có phân trang và lọc | ✅ Hoàn thành |
+| 4 | Xem slot trống, đặt sân chống double booking, test đồng thời | 🟡 Xong phần code |
 | 5 | Giữ chỗ 10 phút, `@Scheduled` tự hủy booking quá hạn | ⏳ |
 | 6 | Thanh toán VNPay sandbox, IPN idempotent | ⏳ |
 | 7 | Email `@Async`, đánh giá, thống kê doanh thu | ⏳ |
@@ -32,7 +32,8 @@ docker compose up -d
 # 2. Chạy ứng dụng (hoặc Run SportBookingApplication trong IntelliJ)
 mvn spring-boot:run
 
-# 3. Chạy unit test
+# 3. Chạy toàn bộ test (unit + integration). Integration test cần Docker đang chạy:
+#    Testcontainers tự khởi động 1 PostgreSQL 17 riêng cho test.
 mvn test
 ```
 
@@ -117,6 +118,62 @@ curl http://localhost:8080/api/v1/venues/1
 
 Mỗi trang kết quả chỉ tốn 3 câu SQL (danh sách, đếm tổng, thống kê loại sân + giá), không phụ thuộc số cụm sân trong trang.
 
+## Đặt sân (Giai đoạn 4)
+
+```bash
+# Lịch trống 1 ngày của sân, theo slot 30 phút (public)
+curl "http://localhost:8080/api/v1/courts/1/availability?date=2026-11-09"
+
+# Đặt sân (cần đăng nhập) -> 201, trạng thái PENDING, giữ chỗ 10 phút chờ thanh toán
+curl -X POST http://localhost:8080/api/v1/bookings -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{"courtId":1,"date":"2026-11-09","startTime":"17:00","endTime":"18:30"}'
+
+# Tìm cụm sân còn trống sân bóng 5 người lúc 17:00–18:30
+curl "http://localhost:8080/api/v1/venues?sportType=FOOTBALL_5&date=2026-11-09&startTime=17:00&endTime=18:30"
+```
+
+Quy tắc: giờ tròn `:00`/`:30`, trong giờ mở cửa, không đặt giờ đã qua, đặt trước tối đa 30 ngày,
+bóng đá tối thiểu 1 tiếng / cầu lông 30 phút, tối đa 4 tiếng, tối đa 3 lượt chưa thanh toán cùng lúc.
+Giá tính theo từng slot nên lượt đặt vắt qua 2 khung giá được tính đúng. Giá do server tính, không nhận từ client.
+
+## ⭐ Chống đặt trùng (double booking)
+
+**Vấn đề.** "Kiểm tra còn trống rồi mới lưu" (check-then-act) là SAI khi có nhiều request cùng lúc:
+cả hai cùng đọc thấy "trống" trước khi ai kịp lưu → cả hai cùng đặt thành công.
+
+```
+Thời gian   Request A                     Request B
+   t1       SELECT: 17:00 còn trống
+   t2                                     SELECT: 17:00 còn trống
+   t3       INSERT booking 17:00
+   t4                                     INSERT booking 17:00   ← trùng!
+```
+
+**Giải pháp đã chọn: UNIQUE constraint.** Mỗi lượt đặt được tách thành các slot 30 phút lưu vào
+`booking_slots` với `UNIQUE (court_id, slot_date, slot_start)`, trong cùng transaction với booking.
+Request đến sau INSERT trùng slot sẽ bị PostgreSQL chặn (`duplicate key`) → rollback → trả `409 SLOT_ALREADY_BOOKED`.
+
+| Cách | Cơ chế | Ưu | Nhược |
+|---|---|---|---|
+| **Unique constraint** ✅ | DB từ chối dòng trùng | Database đảm bảo, đúng cả khi chạy nhiều instance; các slot khác nhau chạy song song; ít code | Cần mô hình slot rời rạc; phát hiện qua exception |
+| Pessimistic lock | `SELECT ... FOR UPDATE` dòng của sân, rồi kiểm tra và ghi | Dùng được cho khoảng giờ tự do | Xếp hàng **mọi** request của sân, kể cả không tranh nhau; giữ khóa lâu; nguy cơ deadlock; phải nhớ khóa ở mọi chỗ ghi |
+| Optimistic lock | Cột `version`, `UPDATE ... WHERE version = ?` | Không khóa khi đọc | Request thua đã làm hết việc rồi mới bị hủy; nhiều tranh chấp → phải retry nhiều; không tự nhiên với INSERT (phải "mượn" version của sân) |
+
+Kết quả thí nghiệm trên PostgreSQL thật (`LockingStrategiesIntegrationTest`, 50ms xử lý giữa kiểm tra và ghi):
+
+| | 50 request cùng đặt 17:00 | 20 request đặt 20 slot khác nhau |
+|---|---|---|
+| check-then-act | **nhiều dòng trùng** ❌ | |
+| Unique constraint | 1 dòng ✅ | ~0,35 giây |
+| Pessimistic lock | 1 dòng ✅ | ~1,2 giây (xếp hàng từng request) |
+| Optimistic lock | 1 dòng ✅ | |
+
+Kiểm chứng trên code thật (`BookingConcurrencyIntegrationTest`): 50 thread gọi `BookingService` cùng lúc
+→ đúng 1 thành công, 49 nhận `SLOT_ALREADY_BOOKED`, database có đúng 1 booking và 2 slot.
+Hai khoảng giao nhau (17:00–18:00 và 17:30–18:30) cũng chỉ 1 thắng; hai khoảng liền kề (17–18h, 18–19h) đều thành công.
+Slot luôn được INSERT theo thứ tự giờ tăng dần nên không xảy ra deadlock.
+
 ## Quyết định thiết kế chính
 
 - **Slot cố định 30 phút.** Mỗi lượt đặt được tách thành các slot trong bảng `booking_slots`.
@@ -141,5 +198,7 @@ Mỗi trang kết quả chỉ tốn 3 câu SQL (danh sách, đếm tổng, thố
 - Tỉnh/quận là text tự do và so khớp có dấu ("Ha Dong" không khớp "Hà Đông").
   Cải tiến: bảng danh mục tỉnh/quận chuẩn hóa, hoặc extension `unaccent` của PostgreSQL.
 - Tìm theo tên dùng `LIKE '%...%'`, không dùng được index B-tree; dữ liệu lớn cần index trigram (`pg_trgm`).
+- Lọc "sân trống" kiểm tra slot chưa bị chiếm nhưng chưa kiểm tra slot đã có giá; khi đặt thì có kiểm tra.
+- Giới hạn 3 lượt chưa thanh toán là giới hạn "mềm": nhiều request song song của cùng 1 khách có thể vượt nhẹ.
 - Đăng xuất chỉ thu hồi refresh token; access token vẫn dùng được tới khi hết hạn (tối đa 15 phút).
   Chặn ngay cần blacklist (dự kiến dùng Redis sau MVP).

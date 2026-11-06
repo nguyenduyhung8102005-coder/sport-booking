@@ -16,7 +16,9 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
-        jdbc.time_zone: UTC
+        # KHÔNG đặt hibernate.jdbc.time_zone: Hibernate sẽ đổi cả LocalTime/LocalDate theo múi giờ đó
+        # (06:00 giờ VN bị lưu thành 23:00, ngày 09/11 có thể thành 08/11).
+        # Instant <-> TIMESTAMPTZ vẫn luôn lưu đúng mốc thời gian tuyệt đối mà không cần cấu hình này.
         format_sql: true
   flyway:
     enabled: true
@@ -26,6 +28,11 @@ spring:
       pageable:
         # Chặn client xin ?size=100000 làm sập DB
         max-page-size: 100
+  mvc:
+    format:
+      # Định dạng query param: ?date=2026-11-07&startTime=17:00
+      date: iso
+      time: HH:mm
 
 app:
   jwt:
@@ -38,6 +45,17 @@ app:
     # Tài khoản admin được tạo tự động khi khởi động nếu chưa tồn tại
     email: ${ADMIN_EMAIL:admin@sportbooking.vn}
     password: ${ADMIN_PASSWORD:Admin@123456}
+  booking:
+    # Giờ của sân là giờ Việt Nam, dù server chạy ở múi giờ nào
+    zone: Asia/Ho_Chi_Minh
+    # Giữ chỗ chờ thanh toán (GĐ 5 sẽ có job tự hủy khi quá hạn)
+    hold-duration: 10m
+    # Chỉ được đặt trước tối đa 30 ngày
+    max-advance-days: 30
+    # Mỗi lượt đặt tối đa 8 slot = 4 tiếng
+    max-slots-per-booking: 8
+    # Chống "giữ chỗ ảo": tối đa 3 lượt đặt chưa thanh toán cùng lúc
+    max-pending-per-customer: 3
 
 springdoc:
   swagger-ui:

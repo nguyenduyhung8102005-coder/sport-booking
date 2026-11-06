@@ -2,6 +2,8 @@ package com.sportbooking.exception;
 
 import com.sportbooking.common.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -23,8 +25,8 @@ import java.util.List;
  * Lỗi 401/403 do Spring Security chặn TRƯỚC khi vào controller được xử lý ở
  * RestAuthenticationEntryPoint / RestAccessDeniedHandler, không phải ở đây.
  *
- * Sẽ bổ sung:
- *  - GĐ 4: DataIntegrityViolationException (trùng slot -> SLOT_ALREADY_BOOKED)
+ * Lỗi trùng slot được BookingService tự nhận diện theo tên constraint và đổi thành SLOT_ALREADY_BOOKED.
+ * Handler DataIntegrityViolationException ở đây chỉ là lưới an toàn cho các ràng buộc khác.
  */
 @Slf4j
 @RestControllerAdvice
@@ -75,6 +77,23 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
         return build(ErrorCode.FORBIDDEN, ErrorCode.FORBIDDEN.getDefaultMessage(), null);
+    }
+
+    /**
+     * Vi phạm ràng buộc DB mà service chưa xử lý riêng (UNIQUE, CHECK, khóa ngoại...) -> 409 thay vì 500.
+     * Không trả message gốc ra ngoài vì nó chứa tên bảng, tên cột.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation: {}", ex.getMostSpecificCause().getMessage());
+        return build(ErrorCode.DATA_CONFLICT, ErrorCode.DATA_CONFLICT.getDefaultMessage(), null);
+    }
+
+    /** @Version không khớp: bản ghi vừa bị request khác sửa (sẽ gặp nhiều ở GĐ 5). */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLock(OptimisticLockingFailureException ex) {
+        log.info("Optimistic lock conflict: {}", ex.getMessage());
+        return build(ErrorCode.DATA_CONFLICT, ErrorCode.DATA_CONFLICT.getDefaultMessage(), null);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)

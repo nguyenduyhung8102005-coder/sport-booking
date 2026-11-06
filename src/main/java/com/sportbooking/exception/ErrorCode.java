@@ -38,7 +38,15 @@ public enum ErrorCode {
     INVALID_OPENING_HOURS(HttpStatus.BAD_REQUEST, "Giờ đóng cửa phải sau giờ mở cửa"),
     INVALID_PRICE_RANGE(HttpStatus.BAD_REQUEST, "Giá tối thiểu không được lớn hơn giá tối đa"),
     COURT_NAME_ALREADY_EXISTS(HttpStatus.CONFLICT, "Tên sân đã tồn tại trong cụm sân này"),
-    INVALID_PRICE_RULES(HttpStatus.BAD_REQUEST, "Bảng giá không hợp lệ");
+    INVALID_PRICE_RULES(HttpStatus.BAD_REQUEST, "Bảng giá không hợp lệ"),
+
+    // ===== Đặt sân (GĐ 4) =====
+    COURT_NOT_AVAILABLE(HttpStatus.CONFLICT, "Sân đang bảo trì hoặc ngừng hoạt động"),
+    INVALID_BOOKING_TIME(HttpStatus.BAD_REQUEST, "Thời gian đặt sân không hợp lệ"),
+    SLOT_NOT_PRICED(HttpStatus.BAD_REQUEST, "Khung giờ chưa có giá, chưa thể đặt"),
+    SLOT_ALREADY_BOOKED(HttpStatus.CONFLICT, "Khung giờ này đã có người đặt, vui lòng chọn giờ khác"),
+    TOO_MANY_PENDING_BOOKINGS(HttpStatus.CONFLICT, "Bạn đang có quá nhiều lượt đặt chưa thanh toán"),
+    DATA_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu vừa bị thay đổi hoặc bị trùng, vui lòng thử lại");
 
     private final HttpStatus status;
     private final String defaultMessage;

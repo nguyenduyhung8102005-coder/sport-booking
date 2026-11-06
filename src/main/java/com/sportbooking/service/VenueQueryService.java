@@ -9,6 +9,8 @@ import com.sportbooking.entity.Court;
 import com.sportbooking.entity.PriceRule;
 import com.sportbooking.entity.Venue;
 import com.sportbooking.entity.enums.CourtStatus;
+import com.sportbooking.entity.enums.DayType;
+import com.sportbooking.repository.criteria.CourtCriteria;
 import com.sportbooking.exception.AppException;
 import com.sportbooking.exception.ErrorCode;
 import com.sportbooking.mapper.VenueMapper;
@@ -53,14 +55,23 @@ public class VenueQueryService {
                 && criteria.minPrice() > criteria.maxPrice()) {
             throw new AppException(ErrorCode.INVALID_PRICE_RANGE);
         }
+        validateTimeFilter(criteria);
+
+        // Không chọn loại ngày nhưng có chọn ngày -> tự suy ra (thứ 7, CN = cuối tuần) để lọc giá đúng
+        DayType dayType = criteria.dayType() != null || criteria.date() == null
+                ? criteria.dayType()
+                : DayType.of(criteria.date());
+
+        CourtCriteria courtCriteria = new CourtCriteria(criteria.sportType(), dayType,
+                criteria.minPrice(), criteria.maxPrice(),
+                criteria.date(), criteria.startTime(), criteria.endTime());
 
         Specification<Venue> spec = Specification.allOf(
                 VenueSpecifications.isPubliclyVisible(),
                 VenueSpecifications.nameContains(criteria.keyword()),
                 VenueSpecifications.cityEquals(criteria.city()),
                 VenueSpecifications.districtEquals(criteria.district()),
-                VenueSpecifications.hasMatchingCourt(
-                        criteria.sportType(), criteria.dayType(), criteria.minPrice(), criteria.maxPrice()));
+                VenueSpecifications.hasMatchingCourt(courtCriteria));
 
         Page<Venue> page = venueRepository.findAll(spec, PageableUtils.withAllowedSort(pageable, SEARCH_SORTABLE));
 
@@ -96,6 +107,18 @@ public class VenueQueryService {
                         .collect(Collectors.groupingBy(rule -> rule.getCourt().getId()));
 
         return VenueMapper.toDetail(venue, courts, rulesByCourtId);
+    }
+
+    /** Lọc giờ trống cần đủ cả 3: date, startTime, endTime. */
+    private static void validateTimeFilter(VenueSearchRequest criteria) {
+        boolean anyGiven = criteria.date() != null || criteria.startTime() != null || criteria.endTime() != null;
+        boolean allGiven = criteria.date() != null && criteria.startTime() != null && criteria.endTime() != null;
+        if (anyGiven && !allGiven) {
+            throw new AppException(ErrorCode.BAD_REQUEST, "Lọc sân trống cần đủ date, startTime và endTime");
+        }
+        if (allGiven && !criteria.endTime().isAfter(criteria.startTime())) {
+            throw new AppException(ErrorCode.INVALID_BOOKING_TIME, "Giờ kết thúc phải sau giờ bắt đầu");
+        }
     }
 
     private Map<Long, List<VenueSportStat>> loadSportStats(List<Venue> venues) {

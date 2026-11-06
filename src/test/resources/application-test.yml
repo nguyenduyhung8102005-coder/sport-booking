@@ -1,0 +1,7 @@
+# Cấu hình riêng khi chạy test (profile "test"). Datasource do Testcontainers cung cấp (@ServiceConnection).
+logging:
+  level:
+    org.hibernate.SQL: warn
+    # Trong test đồng thời, các request thua cuộc gây lỗi "duplicate key" ở DB. Đó là hành vi MONG ĐỢI,
+    # tắt log này để output test dễ đọc.
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: off

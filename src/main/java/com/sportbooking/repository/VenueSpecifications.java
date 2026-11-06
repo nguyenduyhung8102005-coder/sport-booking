@@ -1,14 +1,14 @@
 package com.sportbooking.repository;
 
+import com.sportbooking.entity.BookingSlot;
 import com.sportbooking.entity.Court;
 import com.sportbooking.entity.PriceRule;
 import com.sportbooking.entity.User;
 import com.sportbooking.entity.Venue;
 import com.sportbooking.entity.enums.CourtStatus;
-import com.sportbooking.entity.enums.DayType;
-import com.sportbooking.entity.enums.SportType;
 import com.sportbooking.entity.enums.UserStatus;
 import com.sportbooking.entity.enums.VenueStatus;
+import com.sportbooking.repository.criteria.CourtCriteria;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
@@ -58,22 +58,25 @@ public final class VenueSpecifications {
 
     /**
      * Cụm sân có ÍT NHẤT MỘT sân con thỏa TẤT CẢ điều kiện: đang hoạt động, đúng loại sân,
-     * và có khung giá nằm trong khoảng giá.
+     * có khung giá nằm trong khoảng giá, và (GĐ 4) còn trống toàn bộ khoảng giờ khách muốn.
      *
      * Vì sao gom vào MỘT subquery? Nếu tách thành "có sân bóng" và "có giá dưới 100k" riêng,
      * một cụm có sân bóng 500k và sân cầu lông 80k sẽ khớp sai khi khách tìm "sân bóng dưới 100k".
+     * Tương tự: "còn trống 17:00–18:00" phải đúng với CHÍNH sân con đúng loại đó.
      *
      * SQL sinh ra có dạng:
-     *   WHERE EXISTS (SELECT c.id FROM courts c
+     *   WHERE v.open_time <= ? AND v.close_time >= ?
+     *     AND EXISTS (SELECT c.id FROM courts c
      *                 WHERE c.venue_id = v.id AND c.status = 'ACTIVE' AND c.sport_type = ?
      *                   AND EXISTS (SELECT p.id FROM price_rules p
-     *                               WHERE p.court_id = c.id AND p.price_per_hour BETWEEN ? AND ?))
+     *                               WHERE p.court_id = c.id AND p.price_per_hour BETWEEN ? AND ?)
+     *                   AND NOT EXISTS (SELECT s.id FROM booking_slots s
+     *                                   WHERE s.court_id = c.id AND s.slot_date = ?
+     *                                     AND s.slot_start >= ? AND s.slot_start < ?))
      */
-    public static Specification<Venue> hasMatchingCourt(SportType sportType, DayType dayType,
-                                                        Long minPrice, Long maxPrice) {
+    public static Specification<Venue> hasMatchingCourt(CourtCriteria criteria) {
         return (root, query, cb) -> {
-            boolean filterPrice = minPrice != null || maxPrice != null;
-            if (sportType == null && !filterPrice) {
+            if (criteria.isEmpty()) {
                 return cb.conjunction();
             }
 
@@ -82,30 +85,48 @@ public final class VenueSpecifications {
             List<Predicate> courtConditions = new ArrayList<>();
             courtConditions.add(cb.equal(court.get("venue"), root));        // liên kết với cụm sân bên ngoài
             courtConditions.add(cb.equal(court.get("status"), CourtStatus.ACTIVE));
-            if (sportType != null) {
-                courtConditions.add(cb.equal(court.get("sportType"), sportType));
+            if (criteria.sportType() != null) {
+                courtConditions.add(cb.equal(court.get("sportType"), criteria.sportType()));
             }
 
-            if (filterPrice) {
+            if (criteria.hasPriceFilter()) {
                 Subquery<Long> priceQuery = query.subquery(Long.class);
                 Root<PriceRule> rule = priceQuery.from(PriceRule.class);
                 List<Predicate> priceConditions = new ArrayList<>();
                 priceConditions.add(cb.equal(rule.get("court"), court));
-                if (dayType != null) {
-                    priceConditions.add(cb.equal(rule.get("dayType"), dayType));
+                if (criteria.dayType() != null) {
+                    priceConditions.add(cb.equal(rule.get("dayType"), criteria.dayType()));
                 }
-                if (minPrice != null) {
-                    priceConditions.add(cb.greaterThanOrEqualTo(rule.get("pricePerHour"), minPrice));
+                if (criteria.minPrice() != null) {
+                    priceConditions.add(cb.greaterThanOrEqualTo(rule.get("pricePerHour"), criteria.minPrice()));
                 }
-                if (maxPrice != null) {
-                    priceConditions.add(cb.lessThanOrEqualTo(rule.get("pricePerHour"), maxPrice));
+                if (criteria.maxPrice() != null) {
+                    priceConditions.add(cb.lessThanOrEqualTo(rule.get("pricePerHour"), criteria.maxPrice()));
                 }
                 priceQuery.select(rule.get("id")).where(priceConditions.toArray(Predicate[]::new));
                 courtConditions.add(cb.exists(priceQuery));
             }
 
+            List<Predicate> venueConditions = new ArrayList<>();
+            if (criteria.hasTimeRange()) {
+                // Cụm sân phải mở cửa trong cả khoảng giờ
+                venueConditions.add(cb.lessThanOrEqualTo(root.get("openTime"), criteria.startTime()));
+                venueConditions.add(cb.greaterThanOrEqualTo(root.get("closeTime"), criteria.endTime()));
+
+                // Sân con không có slot nào bị chiếm trong [startTime, endTime)
+                Subquery<Long> busyQuery = query.subquery(Long.class);
+                Root<BookingSlot> slot = busyQuery.from(BookingSlot.class);
+                busyQuery.select(slot.get("id")).where(
+                        cb.equal(slot.get("court"), court),
+                        cb.equal(slot.get("slotDate"), criteria.date()),
+                        cb.greaterThanOrEqualTo(slot.get("slotStart"), criteria.startTime()),
+                        cb.lessThan(slot.get("slotStart"), criteria.endTime()));
+                courtConditions.add(cb.not(cb.exists(busyQuery)));
+            }
+
             courtQuery.select(court.get("id")).where(courtConditions.toArray(Predicate[]::new));
-            return cb.exists(courtQuery);
+            venueConditions.add(cb.exists(courtQuery));
+            return cb.and(venueConditions.toArray(Predicate[]::new));
         };
     }
 

@@ -29,6 +29,17 @@ public interface CourtRepository extends JpaRepository<Court, Long> {
     Optional<Court> findOwnedCourt(@Param("courtId") Long courtId, @Param("ownerId") Long ownerId);
 
     /**
+     * Sân kèm cụm sân và chủ sân (để kiểm tra sân có đang mở cho khách đặt không) trong 1 câu query.
+     */
+    @Query("""
+            SELECT c FROM Court c
+            JOIN FETCH c.venue v
+            JOIN FETCH v.owner
+            WHERE c.id = :courtId
+            """)
+    Optional<Court> findWithVenueAndOwnerById(@Param("courtId") Long courtId);
+
+    /**
      * Thống kê theo (cụm sân, loại sân) cho CẢ TRANG kết quả tìm kiếm chỉ bằng 1 câu query:
      * số sân, giá thấp nhất, giá cao nhất.
      * Không có câu này, mỗi cụm sân trong trang sẽ cần thêm 1-2 query riêng (lỗi N+1).

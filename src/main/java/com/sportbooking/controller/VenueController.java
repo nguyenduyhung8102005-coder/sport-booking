@@ -29,7 +29,8 @@ public class VenueController {
     private final VenueQueryService venueQueryService;
 
     @Operation(summary = "Tìm cụm sân",
-            description = "Lọc theo tên, tỉnh/thành, quận/huyện, loại sân, khoảng giá (VND/giờ). "
+            description = "Lọc theo tên, tỉnh/thành, quận/huyện, loại sân, khoảng giá (VND/giờ), "
+                    + "và sân còn trống trong khung giờ (date + startTime + endTime). "
                     + "Sắp xếp được theo: avgRating, reviewCount, name, createdAt. Ví dụ: sort=avgRating,desc")
     @GetMapping
     public ApiResponse<PageResponse<VenueSummaryResponse>> search(
