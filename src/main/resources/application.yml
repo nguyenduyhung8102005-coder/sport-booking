@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: sport-booking
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sport_booking
+    username: ${DB_USERNAME:sport}
+    password: ${DB_PASSWORD:sport123}
+  jpa:
+    # Không giữ kết nối DB mở tới tận controller -> buộc load đủ dữ liệu trong service
+    open-in-view: false
+    hibernate:
+      # Flyway tạo/sửa schema; Hibernate chỉ kiểm tra entity có khớp không
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc.time_zone: UTC
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    web:
+      pageable:
+        # Chặn client xin ?size=100000 làm sập DB
+        max-page-size: 100
+
+app:
+  jwt:
+    # Base64 của khóa >= 256 bit (tạo bằng: openssl rand -base64 32).
+    # Giá trị mặc định CHỈ dùng khi dev. Production BẮT BUỘC truyền qua biến môi trường JWT_SECRET.
+    secret: ${JWT_SECRET:MDc09+Q1ZZXRUDffNEfGOyVP/aYG2ZYzsxV2kXSLX/g=}
+    access-token-ttl: 15m
+    refresh-token-ttl: 7d
+  admin:
+    # Tài khoản admin được tạo tự động khi khởi động nếu chưa tồn tại
+    email: ${ADMIN_EMAIL:admin@sportbooking.vn}
+    password: ${ADMIN_PASSWORD:Admin@123456}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    # In câu SQL ra console, hữu ích khi học. Tắt khi deploy.
+    org.hibernate.SQL: debug

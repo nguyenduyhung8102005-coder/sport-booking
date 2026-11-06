@@ -1,0 +1,39 @@
+package com.sportbooking.exception;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+
+/**
+ * Danh mục mã lỗi. Frontend dựa vào tên mã (code), không dựa vào message.
+ */
+@Getter
+@RequiredArgsConstructor
+public enum ErrorCode {
+
+    // ===== Chung (GĐ 1) =====
+    BAD_REQUEST(HttpStatus.BAD_REQUEST, "Request không đúng định dạng"),
+    VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "Dữ liệu không hợp lệ"),
+    RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy tài nguyên"),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "Phương thức HTTP không được hỗ trợ"),
+    INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Lỗi hệ thống, vui lòng thử lại sau"),
+
+    // ===== Xác thực & phân quyền (GĐ 2) =====
+    UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "Bạn cần đăng nhập để thực hiện thao tác này"),
+    INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "Access token không hợp lệ"),
+    TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "Access token đã hết hạn"),
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Email hoặc mật khẩu không đúng"),
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "Refresh token không hợp lệ hoặc đã hết hạn"),
+    FORBIDDEN(HttpStatus.FORBIDDEN, "Bạn không có quyền thực hiện thao tác này"),
+    ACCOUNT_LOCKED(HttpStatus.FORBIDDEN, "Tài khoản đã bị khóa"),
+
+    // ===== Người dùng & chủ sân (GĐ 2) =====
+    EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "Email đã được sử dụng"),
+    OWNER_APPLICATION_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "Chỉ khách hàng mới có thể đăng ký làm chủ sân"),
+    OWNER_APPLICATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "Bạn đã gửi yêu cầu hoặc đã là chủ sân"),
+    OWNER_APPLICATION_NOT_PENDING(HttpStatus.CONFLICT, "Yêu cầu không còn ở trạng thái chờ duyệt"),
+    CANNOT_MODIFY_ADMIN(HttpStatus.FORBIDDEN, "Không thể thay đổi trạng thái tài khoản quản trị");
+
+    private final HttpStatus status;
+    private final String defaultMessage;
+}
