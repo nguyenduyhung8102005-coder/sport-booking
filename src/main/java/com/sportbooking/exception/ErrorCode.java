@@ -54,7 +54,12 @@ public enum ErrorCode {
 
     // ===== Thanh toán (GĐ 6) =====
     PAYMENT_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "Cổng thanh toán VNPay chưa được cấu hình"),
-    INVALID_PAYMENT_SIGNATURE(HttpStatus.BAD_REQUEST, "Chữ ký dữ liệu thanh toán không hợp lệ");
+    INVALID_PAYMENT_SIGNATURE(HttpStatus.BAD_REQUEST, "Chữ ký dữ liệu thanh toán không hợp lệ"),
+
+    // ===== Đánh giá, thống kê (GĐ 7) =====
+    REVIEW_NOT_ALLOWED(HttpStatus.CONFLICT, "Chỉ đánh giá được lượt đặt đã chơi xong"),
+    REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "Bạn đã đánh giá lượt đặt này rồi"),
+    INVALID_DATE_RANGE(HttpStatus.BAD_REQUEST, "Khoảng thời gian không hợp lệ");
 
     private final HttpStatus status;
     private final String defaultMessage;

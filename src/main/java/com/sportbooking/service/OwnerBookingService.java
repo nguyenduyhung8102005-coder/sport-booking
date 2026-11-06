@@ -3,12 +3,15 @@ package com.sportbooking.service;
 import com.sportbooking.config.BookingProperties;
 import com.sportbooking.dto.response.OwnerBookingResponse;
 import com.sportbooking.entity.Booking;
+import com.sportbooking.event.BookingCancelledByOwnerEvent;
+import com.sportbooking.event.BookingEmailData;
 import com.sportbooking.exception.AppException;
 import com.sportbooking.exception.ErrorCode;
 import com.sportbooking.mapper.BookingMapper;
 import com.sportbooking.repository.BookingRepository;
 import com.sportbooking.repository.VenueRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +30,7 @@ public class OwnerBookingService {
     private final VenueRepository venueRepository;
     private final BookingSlotReleaser bookingSlotReleaser;
     private final BookingProperties bookingProperties;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     /** Lịch 1 ngày của cả cụm sân (mọi trạng thái), sắp theo sân rồi theo giờ. 1 câu query. */
@@ -50,7 +54,8 @@ public class OwnerBookingService {
 
         booking.cancel("Chủ sân hủy: " + reason.trim(), nowInstant);
         bookingSlotReleaser.releaseSlots(booking);
-        // GĐ 7: gửi email báo khách. Lượt đã thanh toán: hoàn tiền (mở rộng sau MVP).
+        // Báo khách qua email sau khi commit. Lượt đã thanh toán: hoàn tiền thủ công (tự động là phần mở rộng).
+        eventPublisher.publishEvent(new BookingCancelledByOwnerEvent(BookingEmailData.from(booking), reason.trim()));
         return BookingMapper.toOwnerResponse(booking);
     }
 }

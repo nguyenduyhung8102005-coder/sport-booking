@@ -36,6 +36,12 @@ spring:
       # Định dạng query param: ?date=2026-11-07&startTime=17:00
       date: iso
       time: HH:mm
+  mail:
+    # Dev: Mailpit trong docker-compose. Production: SMTP thật (Gmail, SendGrid...) qua biến môi trường
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
 
 app:
   jwt:
@@ -64,6 +70,12 @@ app:
     max-slots-per-booking: 8
     # Chống "giữ chỗ ảo": tối đa 3 lượt đặt chưa thanh toán cùng lúc
     max-pending-per-customer: 3
+    # Job chuyển lượt đã thanh toán sang COMPLETED sau giờ chơi: chạy mỗi 5 phút
+    completion-check-interval-ms: 300000
+  mail:
+    # Tắt thì app không gửi email (vẫn chạy bình thường)
+    enabled: true
+    from: "Sport Booking <no-reply@sportbooking.vn>"
   scheduling:
     # Bật/tắt các job @Scheduled (test tắt đi và gọi job trực tiếp để kết quả xác định)
     enabled: true

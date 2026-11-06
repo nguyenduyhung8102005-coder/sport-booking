@@ -62,12 +62,16 @@ public class Venue extends AuditableEntity {
     @Column(nullable = false)
     private VenueStatus status;
 
-    // NUMERIC(2,1) -> BigDecimal: kiểu thập phân chính xác (sẽ cập nhật ở GĐ 7 khi có review)
+    // NUMERIC(2,1) -> BigDecimal: kiểu thập phân chính xác. Cập nhật cùng lúc với reviewCount, ratingTotal.
     @Column(name = "avg_rating", nullable = false, precision = 2, scale = 1)
     private BigDecimal avgRating;
 
     @Column(name = "review_count", nullable = false)
     private int reviewCount;
+
+    /** Tổng điểm mọi đánh giá (V4). Chỉ được cập nhật bằng UPDATE nguyên tử trong VenueRepository.addRating. */
+    @Column(name = "rating_total", nullable = false)
+    private long ratingTotal;
 
     public Venue(User owner, String name, String description, String address,
                  String district, String city, LocalTime openTime, LocalTime closeTime) {
@@ -77,6 +81,7 @@ public class Venue extends AuditableEntity {
         // Hibernate INSERT mọi cột, kể cả cột có DEFAULT trong DB -> phải tự gán giá trị ban đầu
         this.avgRating = BigDecimal.ZERO;
         this.reviewCount = 0;
+        this.ratingTotal = 0;
     }
 
     public void updateInfo(String name, String description, String address,

@@ -17,8 +17,8 @@ Spring Security + JWT (jjwt) · Swagger/OpenAPI · Docker Compose · JUnit 5 · 
 | 3 | Quản lý cụm sân, sân con, bảng giá; tìm kiếm có phân trang và lọc | ✅ Hoàn thành |
 | 4 | Xem slot trống, đặt sân chống double booking, test đồng thời | ✅ Hoàn thành |
 | 5 | Giữ chỗ 10 phút, `@Scheduled` tự hủy booking quá hạn, hủy theo chính sách, lịch chủ sân | ✅ Hoàn thành |
-| 6 | Thanh toán VNPay sandbox, IPN idempotent | 🟡 Xong phần code |
-| 7 | Email `@Async`, đánh giá, thống kê doanh thu | ⏳ |
+| 6 | Thanh toán VNPay sandbox, IPN idempotent | ✅ Hoàn thành |
+| 7 | Email `@Async`, tự hoàn tất lượt đã chơi, đánh giá, thống kê doanh thu | 🟡 Xong phần code |
 | 8 | Hoàn thiện test, Dockerfile, tài liệu | ⏳ |
 
 ## Chạy project
@@ -26,7 +26,7 @@ Spring Security + JWT (jjwt) · Swagger/OpenAPI · Docker Compose · JUnit 5 · 
 Yêu cầu: JDK 21, Docker, Maven (hoặc IntelliJ IDEA, đã có sẵn Maven).
 
 ```bash
-# 1. Khởi động PostgreSQL
+# 1. Khởi động PostgreSQL + Mailpit (hộp thư giả để xem email khi dev)
 docker compose up -d
 
 # 2. Chạy ứng dụng (hoặc Run SportBookingApplication trong IntelliJ)
@@ -38,6 +38,7 @@ mvn test
 ```
 
 - Swagger UI: http://localhost:8080/swagger-ui.html
+- Mailpit (xem email app gửi): http://localhost:8025
 - Reset sạch database: `docker compose down -v`
 
 ### Biến môi trường
@@ -49,6 +50,8 @@ mvn test
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | `admin@sportbooking.vn` / `Admin@123456` | Tài khoản ADMIN tạo tự động khi khởi động lần đầu |
 | `SPRING_PROFILES_ACTIVE` | `dev` | `dev` tự tạo dữ liệu mẫu; đặt `prod` khi deploy |
 | `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` | (trống) | Thông tin sandbox VNPay. Đặt trong file `.env` (xem `.env.example`, không commit) |
+| `MAIL_HOST`, `MAIL_PORT` | `localhost` / `1025` | Máy chủ SMTP (mặc định là Mailpit trong Docker Compose) |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | (trống) | Tài khoản SMTP thật khi deploy (không commit) |
 | `VNPAY_RETURN_URL` | `http://localhost:8080/api/v1/payments/vnpay/return` | Nơi VNPay chuyển trình duyệt về |
 
 ### Dữ liệu mẫu (profile `dev`)
@@ -236,6 +239,54 @@ Mã trả về cho VNPay: `00` xử lý xong · `01` không thấy giao dịch �
    - Cách nhanh khi học: sau khi thanh toán, trình duyệt quay về return URL kèm đầy đủ tham số `vnp_*` đã được VNPay ký,
      đúng bộ tham số của IPN. Sao chép phần query đó và gọi `GET /api/v1/payments/vnpay/ipn?<query>` để mô phỏng IPN.
 
+## Email bất đồng bộ (Giai đoạn 7)
+
+Gửi email khi thanh toán thành công (IPN) và khi chủ sân hủy lượt đặt.
+
+```
+Transaction (IPN / chủ sân hủy) ──publishEvent──> [chờ COMMIT] ──> thread "mail-*" ──> SMTP
+                                   rollback? ──> không gửi gì
+```
+
+- **`@TransactionalEventListener(AFTER_COMMIT)`**: chỉ gửi khi dữ liệu đã thật sự lưu. Gửi trong transaction thì
+  có thể "báo đặt thành công" rồi transaction lại rollback, và transaction bị giữ lâu chờ SMTP.
+- **`@Async("mailExecutor")`**: thread pool riêng (2–4 thread, hàng đợi 500) để SMTP chậm không làm chậm
+  phản hồi IPN cho VNPay. Lỗi gửi mail chỉ ghi log, không ảnh hưởng nghiệp vụ.
+- **Event mang snapshot** (`BookingEmailData`): dữ liệu được đọc xong trong transaction; thread gửi mail không
+  đụng tới entity / quan hệ LAZY (sẽ lỗi `LazyInitializationException`).
+- Test: `BookingEmailIntegrationTest` dùng `JavaMailSender` giả, kiểm tra có gửi sau commit và **không** gửi khi rollback.
+
+## Hoàn tất, đánh giá, thống kê (Giai đoạn 7)
+
+- **Tự hoàn tất:** `BookingCompletionJob` (5 phút/lần) chuyển CONFIRMED đã qua giờ kết thúc sang COMPLETED
+  bằng **1 câu UPDATE hàng loạt**. Bulk update bỏ qua `@Version`, nên câu lệnh tự tăng `version` và `updated_at`.
+  Query dùng partial index `idx_bookings_confirmed_end` (V4).
+- **Đánh giá:** chỉ lượt COMPLETED của chính mình, mỗi lượt 1 lần (`UNIQUE(booking_id)`), 1–5 sao.
+  Điểm trung bình cụm sân cập nhật bằng **1 câu UPDATE nguyên tử**
+  (`review_count = review_count + 1, rating_total = rating_total + :rating`) → không mất lượt khi nhiều người đánh giá cùng lúc.
+
+  | Cách cập nhật (20 đánh giá đồng thời, thí nghiệm trên PostgreSQL) | `review_count` |
+  |---|---|
+  | Đọc lên Java, cộng, ghi lại | 1 – mất 19 lượt |
+  | Tính lại bằng subquery trong UPDATE | 19 – vẫn có thể mất |
+  | UPDATE nguyên tử (cách đang dùng) | **20** – đúng |
+
+- **Thống kê doanh thu** cho chủ sân: chỉ tính CONFIRMED + COMPLETED, nhóm theo ngày hoặc theo sân con bằng `GROUP BY`
+  trong database (không tải hết booking lên Java). Ngày không có lượt nào vẫn hiện với doanh thu 0. Khoảng tối đa 366 ngày.
+
+```bash
+# Khách đánh giá lượt đã chơi xong
+curl -X POST http://localhost:8080/api/v1/bookings/5/review -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" -d '{"rating":5,"comment":"Sân đẹp"}'
+
+# Xem đánh giá của cụm sân (public)
+curl "http://localhost:8080/api/v1/venues/1/reviews?page=0&size=10&sort=rating,desc"
+
+# Doanh thu theo ngày / theo sân con
+curl "http://localhost:8080/api/v1/owner/statistics/revenue?venueId=1&from=2026-11-01&to=2026-11-30&groupBy=DAY" \
+  -H "Authorization: Bearer <ownerToken>"
+```
+
 ## Quyết định thiết kế chính
 
 - **Slot cố định 30 phút.** Mỗi lượt đặt được tách thành các slot trong bảng `booking_slots`.
@@ -268,3 +319,6 @@ Mã trả về cho VNPay: `00` xử lý xong · `01` không thấy giao dịch �
 - Chưa có job đối soát chủ động (gọi API querydr của VNPay) cho giao dịch PENDING lâu không nhận được IPN.
 - Đăng xuất chỉ thu hồi refresh token; access token vẫn dùng được tới khi hết hạn (tối đa 15 phút).
   Chặn ngay cần blacklist (dự kiến dùng Redis sau MVP).
+- Email có thể bị mất nếu app tắt đúng lúc giữa commit và gửi (hàng đợi nằm trong RAM), và không tự gửi lại khi SMTP lỗi.
+  Cải tiến: Outbox pattern (lưu email cần gửi vào bảng trong cùng transaction, job đọc bảng và gửi lại tới khi thành công).
+- Lượt COMPLETED chỉ dựa vào giờ: lượt khách không tới chơi (no-show) vẫn thành COMPLETED và được đánh giá.

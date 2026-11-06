@@ -4,12 +4,15 @@ import com.sportbooking.config.BookingProperties;
 import com.sportbooking.entity.Booking;
 import com.sportbooking.entity.Payment;
 import com.sportbooking.entity.enums.BookingStatus;
+import com.sportbooking.event.BookingConfirmedEvent;
+import com.sportbooking.event.BookingEmailData;
 import com.sportbooking.integration.vnpay.VnPayGateway;
 import com.sportbooking.integration.vnpay.VnPayIpnResponse;
 import com.sportbooking.repository.BookingRepository;
 import com.sportbooking.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -42,6 +45,7 @@ public class VnPayIpnService {
     private final VnPayGateway vnPayGateway;
     private final BookingProperties bookingProperties;
     private final TransactionTemplate transactionTemplate;
+    private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     /**
@@ -109,6 +113,8 @@ public class VnPayIpnService {
             payment.markSuccess(providerTxnNo, bankCode, responseCode, paidAt, raw);
             // Ghi booking ngay: nếu job hết hạn vừa sửa booking này, lỗi optimistic lock nổ ra tại đây
             bookingRepository.flush();
+            // Email xác nhận chỉ được gửi SAU KHI transaction này commit (xem BookingEmailListener)
+            eventPublisher.publishEvent(new BookingConfirmedEvent(BookingEmailData.from(booking)));
             log.info("Booking {} confirmed by payment {}", booking.getBookingCode(), payment.getTxnRef());
         } else {
             // Đã nhận tiền nhưng lượt đặt không còn giữ chỗ (EXPIRED / CANCELLED / đã CONFIRMED bằng giao dịch khác).

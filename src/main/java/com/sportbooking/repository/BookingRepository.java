@@ -2,15 +2,20 @@ package com.sportbooking.repository;
 
 import com.sportbooking.entity.Booking;
 import com.sportbooking.entity.enums.BookingStatus;
+import com.sportbooking.repository.projection.CourtRevenue;
+import com.sportbooking.repository.projection.DailyRevenue;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -59,6 +64,59 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
             ORDER BY c.name, b.startTime
             """)
     List<Booking> findVenueSchedule(@Param("venueId") Long venueId, @Param("date") LocalDate date);
+
+    /**
+     * Chuyển MỌI lượt CONFIRMED đã qua giờ chơi sang COMPLETED bằng 1 câu UPDATE (bulk update).
+     * Không load từng entity: nhanh dù có hàng nghìn lượt.
+     *
+     * Bulk update bỏ qua cơ chế @Version và auditing của Hibernate, nên phải TỰ tăng version
+     * (để request nào đang giữ bản cũ của booking sẽ gặp optimistic lock) và tự gán updatedAt.
+     */
+    @Modifying
+    @Query("""
+            UPDATE Booking b
+            SET b.status = com.sportbooking.entity.enums.BookingStatus.COMPLETED,
+                b.version = b.version + 1,
+                b.updatedAt = :now
+            WHERE b.status = com.sportbooking.entity.enums.BookingStatus.CONFIRMED
+              AND (b.bookingDate < :today OR (b.bookingDate = :today AND b.endTime <= :timeOfDay))
+            """)
+    int completeFinishedBookings(@Param("today") LocalDate today,
+                                 @Param("timeOfDay") LocalTime timeOfDay,
+                                 @Param("now") Instant now);
+
+    /** Doanh thu theo ngày của 1 cụm sân. Tính tổng ngay trong DB, không load từng booking về Java. */
+    @Query("""
+            SELECT new com.sportbooking.repository.projection.DailyRevenue(
+                b.bookingDate, COUNT(b), SUM(b.totalPrice))
+            FROM Booking b
+            WHERE b.court.venue.id = :venueId
+              AND b.status IN :statuses
+              AND b.bookingDate BETWEEN :fromDate AND :toDate
+            GROUP BY b.bookingDate
+            ORDER BY b.bookingDate
+            """)
+    List<DailyRevenue> sumRevenueByDay(@Param("venueId") Long venueId,
+                                       @Param("statuses") Collection<BookingStatus> statuses,
+                                       @Param("fromDate") LocalDate fromDate,
+                                       @Param("toDate") LocalDate toDate);
+
+    /** Doanh thu theo từng sân con, sân nhiều tiền nhất trước. */
+    @Query("""
+            SELECT new com.sportbooking.repository.projection.CourtRevenue(
+                c.id, c.name, COUNT(b), SUM(b.totalPrice))
+            FROM Booking b
+            JOIN b.court c
+            WHERE c.venue.id = :venueId
+              AND b.status IN :statuses
+              AND b.bookingDate BETWEEN :fromDate AND :toDate
+            GROUP BY c.id, c.name
+            ORDER BY SUM(b.totalPrice) DESC
+            """)
+    List<CourtRevenue> sumRevenueByCourt(@Param("venueId") Long venueId,
+                                         @Param("statuses") Collection<BookingStatus> statuses,
+                                         @Param("fromDate") LocalDate fromDate,
+                                         @Param("toDate") LocalDate toDate);
 
     /** Booking thuộc một sân của ownerId (chủ sân chỉ thao tác trên lượt đặt ở sân của mình). */
     @Query("""

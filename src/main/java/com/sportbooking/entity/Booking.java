@@ -109,7 +109,10 @@ public class Booking extends AuditableEntity {
     // Mọi thay đổi trạng thái đi qua các method dưới đây, nên không thể có chuyển đổi sai
     // (ví dụ EXPIRED -> CONFIRMED) dù gọi từ đâu.
 
-    /** PENDING và CONFIRMED đang chiếm slot trong booking_slots; các trạng thái còn lại đã nhả slot. */
+    /**
+     * PENDING và CONFIRMED đang giữ chỗ (hủy được). EXPIRED/CANCELLED đã nhả slot.
+     * COMPLETED vẫn còn slot trong booking_slots nhưng đó là quá khứ, không hủy được nữa.
+     */
     public boolean holdsSlots() {
         return status == BookingStatus.PENDING || status == BookingStatus.CONFIRMED;
     }

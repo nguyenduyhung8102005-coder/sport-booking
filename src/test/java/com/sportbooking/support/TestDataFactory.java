@@ -70,6 +70,17 @@ public class TestDataFactory {
         return new TestCourt(owner.getId(), venue.getId(), venueName, court.getId());
     }
 
+    /** Thêm 1 sân bóng 5 người nữa vào cụm sân đã có, cùng bảng giá với footballCourt(). Trả về id sân mới. */
+    public Long addFootballCourt(TestCourt existing, String name) {
+        Venue venue = venueRepository.findById(existing.venueId()).orElseThrow();
+        Court court = courtRepository.save(new Court(venue, name, SportType.FOOTBALL_5));
+        priceRuleRepository.saveAll(List.of(
+                new PriceRule(court, DayType.WEEKDAY, LocalTime.of(6, 0), LocalTime.of(17, 0), 300_000, PriceLabel.NORMAL),
+                new PriceRule(court, DayType.WEEKDAY, LocalTime.of(17, 0), LocalTime.of(23, 0), 500_000, PriceLabel.PEAK),
+                new PriceRule(court, DayType.WEEKEND, LocalTime.of(6, 0), LocalTime.of(23, 0), 600_000, PriceLabel.PEAK)));
+        return court.getId();
+    }
+
     private static String uniqueEmail(String prefix) {
         return prefix + "-" + UUID.randomUUID() + "@test.vn";
     }
