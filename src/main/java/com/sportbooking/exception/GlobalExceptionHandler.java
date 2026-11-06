@@ -7,7 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.validation.BindException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -24,7 +24,6 @@ import java.util.List;
  * RestAuthenticationEntryPoint / RestAccessDeniedHandler, không phải ở đây.
  *
  * Sẽ bổ sung:
- *  - GĐ 3: HandlerMethodValidationException (validate query param)
  *  - GĐ 4: DataIntegrityViolationException (trùng slot -> SLOT_ALREADY_BOOKED)
  */
 @Slf4j
@@ -36,10 +35,18 @@ public class GlobalExceptionHandler {
         return build(ex.getErrorCode(), ex.getMessage(), null);
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
+    /**
+     * BindException là lớp cha của MethodArgumentNotValidException, nên bắt được cả 2 nguồn lỗi:
+     *  - @Valid @RequestBody (JSON body)
+     *  - @Valid với object gom từ query param (VenueSearchRequest), kể cả lỗi chuyển kiểu
+     *    như ?sportType=TENNIS hay ?minPrice=abc (isBindingFailure = true).
+     */
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<ApiResponse<Void>> handleValidation(BindException ex) {
         List<ApiResponse.FieldError> details = ex.getBindingResult().getFieldErrors().stream()
-                .map(fe -> new ApiResponse.FieldError(fe.getField(), fe.getDefaultMessage()))
+                .map(fe -> new ApiResponse.FieldError(fe.getField(),
+                        // Lỗi chuyển kiểu có message kỹ thuật rất dài -> thay bằng câu dễ hiểu
+                        fe.isBindingFailure() ? "Giá trị '" + fe.getRejectedValue() + "' không hợp lệ" : fe.getDefaultMessage()))
                 .toList();
         return build(ErrorCode.VALIDATION_FAILED, ErrorCode.VALIDATION_FAILED.getDefaultMessage(), details);
     }

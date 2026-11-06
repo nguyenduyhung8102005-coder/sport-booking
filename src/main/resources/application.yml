@@ -1,6 +1,9 @@
 spring:
   application:
     name: sport-booking
+  profiles:
+    # Không chỉ định profile -> dùng "dev" (bật DevDataSeeder). Khi deploy: SPRING_PROFILES_ACTIVE=prod
+    default: dev
   datasource:
     url: jdbc:postgresql://localhost:5432/sport_booking
     username: ${DB_USERNAME:sport}

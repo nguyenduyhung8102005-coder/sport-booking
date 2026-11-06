@@ -1,6 +1,7 @@
 package com.sportbooking.service;
 
 import com.sportbooking.common.PageResponse;
+import com.sportbooking.common.PageableUtils;
 import com.sportbooking.dto.request.UpdateProfileRequest;
 import com.sportbooking.dto.response.UserResponse;
 import com.sportbooking.entity.User;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -51,7 +53,8 @@ public class UserService {
                 UserSpecifications.hasRole(role),
                 UserSpecifications.hasStatus(status),
                 UserSpecifications.matchesKeyword(keyword));
-        return PageResponse.from(userRepository.findAll(spec, pageable).map(UserMapper::toResponse));
+        Pageable safePageable = PageableUtils.withAllowedSort(pageable, List.of("createdAt", "email", "fullName"));
+        return PageResponse.from(userRepository.findAll(spec, safePageable).map(UserMapper::toResponse));
     }
 
     @Transactional

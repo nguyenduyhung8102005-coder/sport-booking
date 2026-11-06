@@ -32,7 +32,13 @@ public enum ErrorCode {
     OWNER_APPLICATION_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "Chỉ khách hàng mới có thể đăng ký làm chủ sân"),
     OWNER_APPLICATION_ALREADY_EXISTS(HttpStatus.CONFLICT, "Bạn đã gửi yêu cầu hoặc đã là chủ sân"),
     OWNER_APPLICATION_NOT_PENDING(HttpStatus.CONFLICT, "Yêu cầu không còn ở trạng thái chờ duyệt"),
-    CANNOT_MODIFY_ADMIN(HttpStatus.FORBIDDEN, "Không thể thay đổi trạng thái tài khoản quản trị");
+    CANNOT_MODIFY_ADMIN(HttpStatus.FORBIDDEN, "Không thể thay đổi trạng thái tài khoản quản trị"),
+
+    // ===== Cụm sân, sân con, bảng giá (GĐ 3) =====
+    INVALID_OPENING_HOURS(HttpStatus.BAD_REQUEST, "Giờ đóng cửa phải sau giờ mở cửa"),
+    INVALID_PRICE_RANGE(HttpStatus.BAD_REQUEST, "Giá tối thiểu không được lớn hơn giá tối đa"),
+    COURT_NAME_ALREADY_EXISTS(HttpStatus.CONFLICT, "Tên sân đã tồn tại trong cụm sân này"),
+    INVALID_PRICE_RULES(HttpStatus.BAD_REQUEST, "Bảng giá không hợp lệ");
 
     private final HttpStatus status;
     private final String defaultMessage;

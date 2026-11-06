@@ -13,8 +13,8 @@ Spring Security + JWT (jjwt) · Swagger/OpenAPI · Docker Compose · JUnit 5 · 
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
 | 1 | Khởi tạo project, schema Flyway, Swagger, response format, exception handler | ✅ Hoàn thành |
-| 2 | Đăng ký / đăng nhập, JWT access + refresh token, phân quyền, duyệt chủ sân | 🟡 Xong phần code |
-| 3 | Quản lý cụm sân, sân con, bảng giá; tìm kiếm có phân trang và lọc | ⏳ |
+| 2 | Đăng ký / đăng nhập, JWT access + refresh token, phân quyền, duyệt chủ sân | ✅ Hoàn thành |
+| 3 | Quản lý cụm sân, sân con, bảng giá; tìm kiếm có phân trang và lọc | 🟡 Xong phần code |
 | 4 | Xem slot trống, đặt sân chống double booking, test đồng thời | ⏳ |
 | 5 | Giữ chỗ 10 phút, `@Scheduled` tự hủy booking quá hạn | ⏳ |
 | 6 | Thanh toán VNPay sandbox, IPN idempotent | ⏳ |
@@ -46,6 +46,17 @@ mvn test
 | `DB_USERNAME`, `DB_PASSWORD` | `sport` / `sport123` | Kết nối PostgreSQL |
 | `JWT_SECRET` | khóa dev trong `application.yml` | Base64 của khóa ≥ 256 bit. Tạo: `openssl rand -base64 32` |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | `admin@sportbooking.vn` / `Admin@123456` | Tài khoản ADMIN tạo tự động khi khởi động lần đầu |
+| `SPRING_PROFILES_ACTIVE` | `dev` | `dev` tự tạo dữ liệu mẫu; đặt `prod` khi deploy |
+
+### Dữ liệu mẫu (profile `dev`)
+
+Lần chạy đầu tiên tự tạo 4 cụm sân ở Hà Nội (1 cụm đang tạm ngừng để kiểm tra bộ lọc) và 2 tài khoản demo,
+mật khẩu đều là `Demo@123456`:
+
+| Email | Role |
+|---|---|
+| `owner@sportbooking.vn` | OWNER (đã được duyệt), sở hữu toàn bộ sân mẫu |
+| `customer@sportbooking.vn` | CUSTOMER |
 
 ## Xác thực
 
@@ -85,6 +96,27 @@ curl -X POST http://localhost:8080/api/v1/auth/refresh -H "Content-Type: applica
 
 Trên Swagger: gọi `/auth/login`, copy `accessToken`, bấm nút **Authorize** và dán token vào.
 
+## Tìm sân (Giai đoạn 3)
+
+```bash
+# Sân bóng 5 người ở Hà Nội, giá ngày thường từ 300k/giờ trở xuống, sắp xếp theo tên
+curl "http://localhost:8080/api/v1/venues?city=Hà%20Nội&sportType=FOOTBALL_5&dayType=WEEKDAY&maxPrice=300000&sort=name,asc"
+
+# Chi tiết cụm sân kèm bảng giá
+curl http://localhost:8080/api/v1/venues/1
+```
+
+| Tham số | Ý nghĩa |
+|---|---|
+| `keyword` | Tìm trong tên cụm sân |
+| `city`, `district` | So khớp không phân biệt hoa thường |
+| `sportType` | `FOOTBALL_5`, `FOOTBALL_7`, `BADMINTON` |
+| `minPrice`, `maxPrice` | VND/giờ, áp dụng cho CÙNG sân con đúng loại |
+| `dayType` | `WEEKDAY` / `WEEKEND`: lọc giá theo loại ngày |
+| `page`, `size`, `sort` | Mặc định `page=0&size=10&sort=avgRating,desc`. Sắp xếp được theo `avgRating`, `reviewCount`, `name`, `createdAt` |
+
+Mỗi trang kết quả chỉ tốn 3 câu SQL (danh sách, đếm tổng, thống kê loại sân + giá), không phụ thuộc số cụm sân trong trang.
+
 ## Quyết định thiết kế chính
 
 - **Slot cố định 30 phút.** Mỗi lượt đặt được tách thành các slot trong bảng `booking_slots`.
@@ -97,9 +129,17 @@ Trên Swagger: gọi `/auth/login`, copy `accessToken`, bấm nút **Authorize**
   lỗi 401/403 của Spring Security đi qua `RestAuthenticationEntryPoint` / `RestAccessDeniedHandler`.
 - **Entity không có setter**; trạng thái chỉ đổi qua method nghiệp vụ (`lock`, `promoteToOwner`...).
 - **Inject `Clock`** thay vì gọi `Instant.now()` để test được logic phụ thuộc thời gian.
+- **Giá lưu theo giờ**, là bội số 1.000đ (migration V2) → giá 1 slot 30 phút luôn là số nguyên.
+- **Chủ sân chỉ thao tác được trên sân của mình**: truy vấn luôn kèm điều kiện `owner_id`;
+  sân của người khác trả 404 thay vì 403 để không lộ sự tồn tại.
+- **Phân trang an toàn**: giới hạn `size ≤ 100`, chỉ cho sắp xếp theo whitelist, luôn thêm `id` làm tiêu chí phụ
+  để thứ tự giữa các trang ổn định.
 
 ## Giới hạn đã biết
 
 - Sân không mở cửa qua nửa đêm; giờ đóng cửa muộn nhất là 23:30.
+- Tỉnh/quận là text tự do và so khớp có dấu ("Ha Dong" không khớp "Hà Đông").
+  Cải tiến: bảng danh mục tỉnh/quận chuẩn hóa, hoặc extension `unaccent` của PostgreSQL.
+- Tìm theo tên dùng `LIKE '%...%'`, không dùng được index B-tree; dữ liệu lớn cần index trigram (`pg_trgm`).
 - Đăng xuất chỉ thu hồi refresh token; access token vẫn dùng được tới khi hết hạn (tối đa 15 phút).
   Chặn ngay cần blacklist (dự kiến dùng Redis sau MVP).
