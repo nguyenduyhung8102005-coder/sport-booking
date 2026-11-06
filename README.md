@@ -15,8 +15,8 @@ Spring Security + JWT (jjwt) · Swagger/OpenAPI · Docker Compose · JUnit 5 · 
 | 1 | Khởi tạo project, schema Flyway, Swagger, response format, exception handler | ✅ Hoàn thành |
 | 2 | Đăng ký / đăng nhập, JWT access + refresh token, phân quyền, duyệt chủ sân | ✅ Hoàn thành |
 | 3 | Quản lý cụm sân, sân con, bảng giá; tìm kiếm có phân trang và lọc | ✅ Hoàn thành |
-| 4 | Xem slot trống, đặt sân chống double booking, test đồng thời | 🟡 Xong phần code |
-| 5 | Giữ chỗ 10 phút, `@Scheduled` tự hủy booking quá hạn | ⏳ |
+| 4 | Xem slot trống, đặt sân chống double booking, test đồng thời | ✅ Hoàn thành |
+| 5 | Giữ chỗ 10 phút, `@Scheduled` tự hủy booking quá hạn, hủy theo chính sách, lịch chủ sân | 🟡 Xong phần code |
 | 6 | Thanh toán VNPay sandbox, IPN idempotent | ⏳ |
 | 7 | Email `@Async`, đánh giá, thống kê doanh thu | ⏳ |
 | 8 | Hoàn thiện test, Dockerfile, tài liệu | ⏳ |
@@ -174,6 +174,34 @@ Kiểm chứng trên code thật (`BookingConcurrencyIntegrationTest`): 50 threa
 Hai khoảng giao nhau (17:00–18:00 và 17:30–18:30) cũng chỉ 1 thắng; hai khoảng liền kề (17–18h, 18–19h) đều thành công.
 Slot luôn được INSERT theo thứ tự giờ tăng dần nên không xảy ra deadlock.
 
+## Vòng đời lượt đặt (Giai đoạn 5)
+
+```
+PENDING ──(thanh toán)──> CONFIRMED ──(chơi xong)──> COMPLETED
+   │                          │
+   ├──(quá 10 phút)──> EXPIRED │
+   └──(khách / chủ sân hủy)────┴──> CANCELLED
+```
+
+- **Tự hết hạn:** `BookingExpirationJob` (`@Scheduled`, `fixedDelay` 30 giây) chuyển PENDING quá hạn sang EXPIRED và nhả slot.
+  Mỗi booking xử lý trong 1 transaction riêng; query dùng partial index `idx_bookings_pending_expiry`.
+- **Hủy:** khách hủy PENDING lúc nào cũng được (trước giờ chơi); lượt đã thanh toán chỉ hủy được trước giờ chơi ≥ 24 giờ.
+  Chủ sân hủy được lượt tại sân của mình, bắt buộc ghi lý do. Slot được nhả ngay.
+- **Cuộc đua job ↔ khách hủy (↔ thanh toán ở GĐ 6):** `@Version` (optimistic lock) đảm bảo chỉ một bên thắng.
+  Mọi luồng đều UPDATE `bookings` trước rồi mới xóa `booking_slots` → cùng thứ tự khóa → không deadlock.
+  `BookingExpirationIntegrationTest` cho job và lệnh hủy chạy song song 10 lần: lần nào cũng đúng 1 bên thắng.
+
+```bash
+# Khách hủy (body không bắt buộc)
+curl -X POST http://localhost:8080/api/v1/bookings/5/cancel -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" -d '{"reason":"Bận việc đột xuất"}'
+
+# Chủ sân xem lịch 1 ngày của cụm sân, hủy lượt đặt
+curl "http://localhost:8080/api/v1/owner/venues/1/bookings?date=2026-11-09" -H "Authorization: Bearer <ownerToken>"
+curl -X POST http://localhost:8080/api/v1/owner/bookings/5/cancel -H "Authorization: Bearer <ownerToken>" \
+  -H "Content-Type: application/json" -d '{"reason":"Sân bảo trì"}'
+```
+
 ## Quyết định thiết kế chính
 
 - **Slot cố định 30 phút.** Mỗi lượt đặt được tách thành các slot trong bảng `booking_slots`.
@@ -200,5 +228,8 @@ Slot luôn được INSERT theo thứ tự giờ tăng dần nên không xảy r
 - Tìm theo tên dùng `LIKE '%...%'`, không dùng được index B-tree; dữ liệu lớn cần index trigram (`pg_trgm`).
 - Lọc "sân trống" kiểm tra slot chưa bị chiếm nhưng chưa kiểm tra slot đã có giá; khi đặt thì có kiểm tra.
 - Giới hạn 3 lượt chưa thanh toán là giới hạn "mềm": nhiều request song song của cùng 1 khách có thể vượt nhẹ.
+- Lượt PENDING quá hạn vẫn chiếm slot thêm tối đa ~30 giây cho tới lần chạy kế tiếp của job.
+- Chạy nhiều instance: job vẫn đúng nhờ `@Version` nhưng các instance có thể làm trùng việc; cải tiến bằng ShedLock / khóa Redis.
+- Lượt đã thanh toán bị hủy: hoàn tiền xử lý thủ công (tự động qua VNPay refund API là phần mở rộng).
 - Đăng xuất chỉ thu hồi refresh token; access token vẫn dùng được tới khi hết hạn (tối đa 15 phút).
   Chặn ngay cần blacklist (dự kiến dùng Redis sau MVP).

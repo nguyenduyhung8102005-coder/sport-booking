@@ -1,4 +1,9 @@
 # Cấu hình riêng khi chạy test (profile "test"). Datasource do Testcontainers cung cấp (@ServiceConnection).
+app:
+  scheduling:
+    # Không để job chạy ngầm theo lịch trong lúc test: test tự gọi job khi cần -> kết quả luôn xác định
+    enabled: false
+
 logging:
   level:
     org.hibernate.SQL: warn

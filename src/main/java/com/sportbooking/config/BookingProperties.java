@@ -16,5 +16,8 @@ public record BookingProperties(
         @NotNull Duration holdDuration,
         @Min(1) int maxAdvanceDays,
         @Min(1) int maxSlotsPerBooking,
-        @Min(1) int maxPendingPerCustomer) {
+        @Min(1) int maxPendingPerCustomer,
+        @Min(1000) long expirationCheckIntervalMs,
+        @Min(1) int expirationBatchSize,
+        @NotNull Duration cancelDeadline) {
 }

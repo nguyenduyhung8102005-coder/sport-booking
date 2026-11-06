@@ -35,7 +35,7 @@ public class TestDataFactory {
     private final CourtRepository courtRepository;
     private final PriceRuleRepository priceRuleRepository;
 
-    public record TestCourt(Long venueId, String venueName, Long courtId) {
+    public record TestCourt(Long ownerId, Long venueId, String venueName, Long courtId) {
     }
 
     public User customer() {
@@ -67,7 +67,7 @@ public class TestDataFactory {
                 new PriceRule(court, DayType.WEEKDAY, LocalTime.of(17, 0), LocalTime.of(23, 0), 500_000, PriceLabel.PEAK),
                 new PriceRule(court, DayType.WEEKEND, LocalTime.of(6, 0), LocalTime.of(23, 0), 600_000, PriceLabel.PEAK)));
 
-        return new TestCourt(venue.getId(), venueName, court.getId());
+        return new TestCourt(owner.getId(), venue.getId(), venueName, court.getId());
     }
 
     private static String uniqueEmail(String prefix) {

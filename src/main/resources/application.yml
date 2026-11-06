@@ -48,14 +48,22 @@ app:
   booking:
     # Giờ của sân là giờ Việt Nam, dù server chạy ở múi giờ nào
     zone: Asia/Ho_Chi_Minh
-    # Giữ chỗ chờ thanh toán (GĐ 5 sẽ có job tự hủy khi quá hạn)
+    # Giữ chỗ chờ thanh toán; quá hạn thì BookingExpirationJob tự chuyển sang EXPIRED và nhả slot
     hold-duration: 10m
+    # Job quét booking quá hạn mỗi 30 giây, mỗi lần tối đa 100 booking
+    expiration-check-interval-ms: 30000
+    expiration-batch-size: 100
+    # Khách chỉ được tự hủy lượt ĐÃ THANH TOÁN nếu còn ít nhất 24 giờ trước giờ chơi
+    cancel-deadline: 24h
     # Chỉ được đặt trước tối đa 30 ngày
     max-advance-days: 30
     # Mỗi lượt đặt tối đa 8 slot = 4 tiếng
     max-slots-per-booking: 8
     # Chống "giữ chỗ ảo": tối đa 3 lượt đặt chưa thanh toán cùng lúc
     max-pending-per-customer: 3
+  scheduling:
+    # Bật/tắt các job @Scheduled (test tắt đi và gọi job trực tiếp để kết quả xác định)
+    enabled: true
 
 springdoc:
   swagger-ui:

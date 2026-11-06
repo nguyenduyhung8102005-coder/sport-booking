@@ -22,5 +22,6 @@ public record BookingResponse(
         long totalPrice,
         BookingStatus status,
         Instant expiresAt,      // hạn thanh toán khi PENDING
+        String cancelReason,    // có giá trị khi CANCELLED
         Instant createdAt) {
 }

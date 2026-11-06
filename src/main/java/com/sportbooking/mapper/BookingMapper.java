@@ -1,8 +1,10 @@
 package com.sportbooking.mapper;
 
 import com.sportbooking.dto.response.BookingResponse;
+import com.sportbooking.dto.response.OwnerBookingResponse;
 import com.sportbooking.entity.Booking;
 import com.sportbooking.entity.Court;
+import com.sportbooking.entity.User;
 import com.sportbooking.entity.Venue;
 
 public final class BookingMapper {
@@ -29,6 +31,28 @@ public final class BookingMapper {
                 booking.getTotalPrice(),
                 booking.getStatus(),
                 booking.getExpiresAt(),
+                booking.getCancelReason(),
+                booking.getCreatedAt());
+    }
+
+    /** Cần booking.court và booking.customer đã được load. */
+    public static OwnerBookingResponse toOwnerResponse(Booking booking) {
+        Court court = booking.getCourt();
+        User customer = booking.getCustomer();
+        return new OwnerBookingResponse(
+                booking.getId(),
+                booking.getBookingCode(),
+                court.getId(),
+                court.getName(),
+                court.getSportType(),
+                customer.getFullName(),
+                customer.getPhone(),
+                booking.getBookingDate(),
+                booking.getStartTime(),
+                booking.getEndTime(),
+                booking.getTotalPrice(),
+                booking.getStatus(),
+                booking.getCancelReason(),
                 booking.getCreatedAt());
     }
 }

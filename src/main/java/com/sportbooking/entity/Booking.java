@@ -2,6 +2,8 @@ package com.sportbooking.entity;
 
 import com.sportbooking.common.AuditableEntity;
 import com.sportbooking.entity.enums.BookingStatus;
+import com.sportbooking.exception.AppException;
+import com.sportbooking.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -20,6 +22,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 /**
@@ -74,8 +77,9 @@ public class Booking extends AuditableEntity {
     private String cancelReason;
 
     /**
-     * Optimistic lock: Hibernate tự thêm "WHERE version = ?" vào mỗi câu UPDATE và tăng version.
-     * Sẽ dùng ở GĐ 5 khi job hủy booking quá hạn và callback thanh toán cùng sửa 1 booking.
+     * Optimistic lock: Hibernate tự sinh "UPDATE ... SET version = version + 1 WHERE id = ? AND version = ?".
+     * Nếu 0 dòng được cập nhật (người khác vừa sửa trước) -> ném OptimisticLockException.
+     * Bảo vệ khi job hết hạn, khách hủy, (GĐ 6) callback thanh toán cùng sửa 1 booking.
      */
     @Version
     private long version;
@@ -93,5 +97,46 @@ public class Booking extends AuditableEntity {
         booking.status = BookingStatus.PENDING;
         booking.expiresAt = expiresAt;
         return booking;
+    }
+
+    // ===================== Máy trạng thái =====================
+    //
+    //   PENDING ──(thanh toán, GĐ 6)──> CONFIRMED ──(chơi xong, GĐ 7)──> COMPLETED
+    //      │                               │
+    //      ├──(quá hạn giữ chỗ)──> EXPIRED │
+    //      └──(khách / chủ sân hủy)────────┴──> CANCELLED
+    //
+    // Mọi thay đổi trạng thái đi qua các method dưới đây, nên không thể có chuyển đổi sai
+    // (ví dụ EXPIRED -> CONFIRMED) dù gọi từ đâu.
+
+    /** PENDING và CONFIRMED đang chiếm slot trong booking_slots; các trạng thái còn lại đã nhả slot. */
+    public boolean holdsSlots() {
+        return status == BookingStatus.PENDING || status == BookingStatus.CONFIRMED;
+    }
+
+    public boolean isOverdue(Instant now) {
+        return status == BookingStatus.PENDING && expiresAt != null && expiresAt.isBefore(now);
+    }
+
+    public LocalDateTime startDateTime() {
+        return LocalDateTime.of(bookingDate, startTime);
+    }
+
+    public void expire() {
+        if (status != BookingStatus.PENDING) {
+            throw new AppException(ErrorCode.INVALID_BOOKING_STATE,
+                    "Chỉ lượt đặt đang chờ thanh toán mới có thể hết hạn (hiện tại: " + status + ")");
+        }
+        status = BookingStatus.EXPIRED;
+    }
+
+    public void cancel(String reason, Instant now) {
+        if (!holdsSlots()) {
+            throw new AppException(ErrorCode.INVALID_BOOKING_STATE,
+                    "Không thể hủy lượt đặt đang ở trạng thái " + status);
+        }
+        status = BookingStatus.CANCELLED;
+        cancelledAt = now;
+        cancelReason = reason;
     }
 }

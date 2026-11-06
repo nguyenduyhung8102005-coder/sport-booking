@@ -63,6 +63,7 @@ public class BookingService {
     private final PriceRuleRepository priceRuleRepository;
     private final UserRepository userRepository;
     private final CourtAvailabilityService courtAvailabilityService;
+    private final BookingSlotReleaser bookingSlotReleaser;
     private final BookingProperties bookingProperties;
     private final Clock clock;
 
@@ -142,6 +143,24 @@ public class BookingService {
                 ? bookingRepository.findByCustomerId(customerId, safePageable)
                 : bookingRepository.findByCustomerIdAndStatus(customerId, status, safePageable);
         return PageResponse.from(page.map(BookingMapper::toResponse));
+    }
+
+    /**
+     * Khách tự hủy lượt đặt của mình. Nếu job hết hạn (hoặc thanh toán) sửa booking này cùng lúc,
+     * một bên sẽ thua bằng OptimisticLockingFailureException -> GlobalExceptionHandler trả 409.
+     */
+    @Transactional
+    public BookingResponse cancelMyBooking(Long customerId, Long bookingId, String reason) {
+        Booking booking = bookingRepository.findByIdAndCustomerId(bookingId, customerId)
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Không tìm thấy lượt đặt id=" + bookingId));
+
+        Instant nowInstant = clock.instant();
+        CancellationPolicy.checkCustomerCancellation(booking.getStatus(), booking.startDateTime(),
+                LocalDateTime.ofInstant(nowInstant, bookingProperties.zone()), bookingProperties.cancelDeadline());
+
+        booking.cancel(reason == null || reason.isBlank() ? "Khách hủy" : reason.trim(), nowInstant);
+        bookingSlotReleaser.releaseSlots(booking);
+        return BookingMapper.toResponse(booking);
     }
 
     @Transactional(readOnly = true)

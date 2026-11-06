@@ -2,6 +2,7 @@ package com.sportbooking.repository;
 
 import com.sportbooking.entity.BookingSlot;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -27,4 +28,11 @@ public interface BookingSlotRepository extends JpaRepository<BookingSlot, Long> 
                                         @Param("slotStarts") Collection<LocalTime> slotStarts);
 
     long countByCourtIdAndSlotDate(Long courtId, LocalDate slotDate);
+
+    long countByBookingId(Long bookingId);
+
+    /** Nhả toàn bộ slot của 1 booking: 1 câu DELETE chạy ngay (dùng index idx_booking_slots_booking). */
+    @Modifying
+    @Query("DELETE FROM BookingSlot s WHERE s.booking.id = :bookingId")
+    int deleteByBookingId(@Param("bookingId") Long bookingId);
 }

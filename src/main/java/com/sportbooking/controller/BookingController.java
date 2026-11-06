@@ -2,6 +2,7 @@ package com.sportbooking.controller;
 
 import com.sportbooking.common.ApiResponse;
 import com.sportbooking.common.PageResponse;
+import com.sportbooking.dto.request.CancelBookingRequest;
 import com.sportbooking.dto.request.CreateBookingRequest;
 import com.sportbooking.dto.response.BookingResponse;
 import com.sportbooking.entity.enums.BookingStatus;
@@ -61,5 +62,16 @@ public class BookingController {
     public ApiResponse<BookingResponse> getOne(@AuthenticationPrincipal UserPrincipal customer,
                                                @PathVariable Long bookingId) {
         return ApiResponse.ok(bookingService.getMyBooking(customer.id(), bookingId));
+    }
+
+    @Operation(summary = "Hủy lượt đặt của tôi",
+            description = "PENDING: hủy được tới trước giờ chơi. CONFIRMED: chỉ hủy được trước giờ chơi ít nhất 24 giờ. "
+                    + "Body không bắt buộc. Slot được nhả ngay để người khác đặt.")
+    @PostMapping("/{bookingId}/cancel")
+    public ApiResponse<BookingResponse> cancel(@AuthenticationPrincipal UserPrincipal customer,
+                                               @PathVariable Long bookingId,
+                                               @Valid @RequestBody(required = false) CancelBookingRequest request) {
+        String reason = request == null ? null : request.reason();
+        return ApiResponse.ok(bookingService.cancelMyBooking(customer.id(), bookingId, reason));
     }
 }

@@ -6,8 +6,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -30,4 +34,39 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     long countByCustomerIdAndStatusAndExpiresAtAfter(Long customerId, BookingStatus status, Instant time);
 
     long countByCourtId(Long courtId);
+
+    /**
+     * Id các booking PENDING đã quá hạn, cũ nhất trước. Chỉ lấy id (nhẹ), mỗi id xử lý riêng sau.
+     *
+     * Viết hằng số enum THẲNG vào câu query (không dùng tham số :status): Hibernate sinh ra
+     * "WHERE status = 'PENDING'", khớp đúng điều kiện của partial index idx_bookings_pending_expiry.
+     * Nếu status là tham số, PostgreSQL có thể không dùng được partial index đó.
+     */
+    @Query("""
+            SELECT b.id FROM Booking b
+            WHERE b.status = com.sportbooking.entity.enums.BookingStatus.PENDING
+              AND b.expiresAt < :now
+            ORDER BY b.expiresAt
+            """)
+    List<Long> findOverdueIds(@Param("now") Instant now, Pageable pageable);
+
+    /** Lịch 1 ngày của cả cụm sân cho chủ sân: kèm sân và khách trong 1 câu query. */
+    @Query("""
+            SELECT b FROM Booking b
+            JOIN FETCH b.court c
+            JOIN FETCH b.customer
+            WHERE c.venue.id = :venueId AND b.bookingDate = :date
+            ORDER BY c.name, b.startTime
+            """)
+    List<Booking> findVenueSchedule(@Param("venueId") Long venueId, @Param("date") LocalDate date);
+
+    /** Booking thuộc một sân của ownerId (chủ sân chỉ thao tác trên lượt đặt ở sân của mình). */
+    @Query("""
+            SELECT b FROM Booking b
+            JOIN FETCH b.court c
+            JOIN FETCH c.venue v
+            JOIN FETCH b.customer
+            WHERE b.id = :bookingId AND v.owner.id = :ownerId
+            """)
+    Optional<Booking> findForOwner(@Param("bookingId") Long bookingId, @Param("ownerId") Long ownerId);
 }

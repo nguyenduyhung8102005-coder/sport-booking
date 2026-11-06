@@ -46,7 +46,11 @@ public enum ErrorCode {
     SLOT_NOT_PRICED(HttpStatus.BAD_REQUEST, "Khung giờ chưa có giá, chưa thể đặt"),
     SLOT_ALREADY_BOOKED(HttpStatus.CONFLICT, "Khung giờ này đã có người đặt, vui lòng chọn giờ khác"),
     TOO_MANY_PENDING_BOOKINGS(HttpStatus.CONFLICT, "Bạn đang có quá nhiều lượt đặt chưa thanh toán"),
-    DATA_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu vừa bị thay đổi hoặc bị trùng, vui lòng thử lại");
+    DATA_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu vừa bị thay đổi hoặc bị trùng, vui lòng thử lại"),
+
+    // ===== Vòng đời lượt đặt (GĐ 5) =====
+    INVALID_BOOKING_STATE(HttpStatus.CONFLICT, "Trạng thái lượt đặt không cho phép thao tác này"),
+    CANCELLATION_NOT_ALLOWED(HttpStatus.CONFLICT, "Không thể hủy lượt đặt này");
 
     private final HttpStatus status;
     private final String defaultMessage;
